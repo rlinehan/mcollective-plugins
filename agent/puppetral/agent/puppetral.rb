@@ -1,5 +1,6 @@
 $puppet_application_name = :agent
 require 'puppet'
+require 'puppet/face/resource'
 
 module MCollective
   module Agent
@@ -18,13 +19,10 @@ module MCollective
     # You can use puppetral to declare instances of any sensible Puppet type,
     # as long as you supply all of the attributes that the type requires.
     class Puppetral<RPC::Agent
-      metadata  :name        => "puppetral",
-                :description => "View and edit resources with Puppet's resource abstraction layer",
-                :author      => "R.I.Pienaar <rip@devco.net>, Max Martin <max@puppetlabs.com>",
-                :license     => "ASL2",
-                :version     => "0.3",
-                :url         => "https://github.com/puppetlabs/mcollective-plugins",
-                :timeout     => 180
+      def initialize
+        super
+        ::Puppet.initialize_settings
+      end
 
       action "create" do
         type = request[:type]
@@ -33,8 +31,8 @@ module MCollective
 
         parameters = remove_conflicts(type, title, parameters, request[:avoid_conflict])
 
-        resource = Puppet::Resource.new(type, title, :parameters => parameters)
-        result, report = Puppet::Resource.indirection.save(resource)
+        resource = ::Puppet::Resource.new(type, title, :parameters => parameters)
+        result, report = ::Puppet::Resource.indirection.save(resource)
 
         success = true
         if report && report.resource_statuses.first.last.failed
@@ -44,7 +42,7 @@ module MCollective
 
         if success
           reply[:status] = "Resource was created"
-          reply[:resource] = retain_params(Puppet::Resource.indirection.find([type, title].join('/')))
+          reply[:resource] = retain_params(::Puppet::Resource.indirection.find([type, title].join('/')))
         end
       end
 
@@ -56,7 +54,7 @@ module MCollective
       def remove_conflicts(type, title, parameters, key)
         if key && parameters.has_key?(key)
           value = parameters[key]
-          search_result = Puppet::Resource.indirection.search(type, {})
+          search_result = ::Puppet::Resource.indirection.search(type, {})
           search_result.each do |result|
             resource = result.to_pson_data_hash
             if resource['parameters'][key.to_sym].to_s == value.to_s || resource['title'] == title
@@ -82,14 +80,14 @@ module MCollective
       action "find" do
         type = request[:type]
         title = request[:title]
-        typeobj = Puppet::Type.type(type) or raise "Could not find type #{type}"
+        typeobj = ::Puppet::Type.type(type) or raise "Could not find type #{type}"
 
         if typeobj
-          resource = Puppet::Resource.indirection.find([type, title].join('/'))
+          resource = ::Puppet::Resource.indirection.find([type, title].join('/'))
           retain_params(resource).each { |k,v| reply[k] = v }
 
           begin
-            managed_resources = File.readlines(Puppet[:resourcefile])
+            managed_resources = File.readlines(::Puppet[:resourcefile])
             managed_resources = managed_resources.map{|r|r.chomp}
             reply[:managed] = managed_resources.include?("#{type}[#{title}]")
           rescue
@@ -100,10 +98,10 @@ module MCollective
 
       action "search" do
         type = request[:type]
-        typeobj = Puppet::Type.type(type) or raise "Could not find type #{type}"
+        typeobj = ::Puppet::Type.type(type) or raise "Could not find type #{type}"
 
         if typeobj
-          result = Puppet::Resource.indirection.search(type, {}).map do |r|
+          result = ::Puppet::Resource.indirection.search(type, {}).map do |r|
             retain_params(r)
           end
 

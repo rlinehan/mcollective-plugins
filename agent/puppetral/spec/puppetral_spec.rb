@@ -1,10 +1,17 @@
 #!/usr/bin/env rspec
 require 'spec_helper'
+require 'tmpdir'
 
 describe "puppetral agent" do
-  before :all do
+  before do
     agent_file = File.join([File.dirname(__FILE__), "../agent/puppetral.rb"])
     @agent = MCollective::Test::LocalAgentTest.new("puppetral", :agent_file => agent_file).plugin
+    @vardir = Dir.mktmpdir
+    ::Puppet[:vardir] = @vardir
+  end
+
+  after do
+    FileUtils.rm_rf(@vardir) if File.directory?(@vardir)
   end
 
   describe "#find" do
@@ -15,7 +22,7 @@ describe "puppetral agent" do
     end
 
     it "should specify an ensure value for the resource" do
-      result = @agent.call(:find, :type => 'User', :title => 'bob')
+      result = @agent.call(:find, :type => 'Group', :title => 'alice')
       result[:data]['parameters'].keys.should include :ensure
     end
 
@@ -84,25 +91,25 @@ describe "puppetral agent" do
     end
     describe "when avoiding conflicts" do
       it "should remove the passed parameter if there is a conflict with it" do
-        Puppet::Resource.expects(:new).with('group', 'testgroup', :parameters => {:ensure=>'present'})
-        Puppet::Resource.indirection.expects(:save).returns({:ensure=>:present})
-        Puppet::Resource.indirection.expects(:search).with('group', {}).returns(group_with_gid(0))
+        ::Puppet::Resource.expects(:new).with('group', 'testgroup', :parameters => {:ensure=>'present'})
+        ::Puppet::Resource.indirection.expects(:save).returns({:ensure=>:present})
+        ::Puppet::Resource.indirection.expects(:search).with('group', {}).returns(group_with_gid(0))
         result = @agent.call(:create, :type => 'group', :title => 'testgroup',
                              :parameters => {:ensure => 'present', :gid => "0"}, :avoid_conflict => :gid)
       end
 
       it "should remove the passed parameter if there is a resource with a conflicting title" do
-        Puppet::Resource.expects(:new).with('group', 'wheel', :parameters => {:ensure=>'present'})
-        Puppet::Resource.indirection.expects(:save).returns({:ensure=>:present})
-        Puppet::Resource.indirection.expects(:search).with('group', {}).returns(group_with_gid(2))
+        ::Puppet::Resource.expects(:new).with('group', 'wheel', :parameters => {:ensure=>'present'})
+        ::Puppet::Resource.indirection.expects(:save).returns({:ensure=>:present})
+        ::Puppet::Resource.indirection.expects(:search).with('group', {}).returns(group_with_gid(2))
         result = @agent.call(:create, :type => 'group', :title => 'wheel',
                              :parameters => {:ensure => 'present', :gid => "0"}, :avoid_conflict => :gid)
       end
 
       it "should do nothing if there is no conflict" do
-        Puppet::Resource.expects(:new).with('group', 'testgroup', :parameters => {:ensure=>'present', :gid => '555'})
-        Puppet::Resource.indirection.expects(:save).returns({:ensure=>:present})
-        Puppet::Resource.indirection.expects(:search).with('group', {}).returns(group_with_gid(0))
+        ::Puppet::Resource.expects(:new).with('group', 'testgroup', :parameters => {:ensure=>'present', :gid => '555'})
+        ::Puppet::Resource.indirection.expects(:save).returns({:ensure=>:present})
+        ::Puppet::Resource.indirection.expects(:search).with('group', {}).returns(group_with_gid(0))
         result = @agent.call(:create, :type => 'group', :title => 'testgroup',
                              :parameters => {:ensure => 'present', :gid => "555"}, :avoid_conflict => :gid)
       end
